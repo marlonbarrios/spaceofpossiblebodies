@@ -356,7 +356,7 @@ async function generateImage() {
     let environment = random(environments);
     
   
-    let prompt = `black background midro and macro, biological entity visualization of ${subject} ${element} ${environment} ${style} ${colorScheme}, 
+    let prompt = ` ${subject} ${ element} ${environment} ${style} ${colorScheme}, realistic organism on a black background
     speculative evolution, extreme biological forms, organic machinery,
     microscopic organisms, bacterial colonies, fungal networks,
     deep sea creatures, extremophile life forms, symbiotic organisms,
