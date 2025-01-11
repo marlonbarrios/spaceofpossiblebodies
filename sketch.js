@@ -357,15 +357,7 @@ async function generateImage() {
     
   
     let prompt = ` ${subject} ${ element} ${environment} ${style} ${colorScheme}, realistic organism on a black background
-    speculative evolution, extreme biological forms, organic machinery,
-    microscopic organisms, bacterial colonies, fungal networks,
-    deep sea creatures, extremophile life forms, symbiotic organisms,
-    biological metamorphosis, organic architectures, living crystals,
-    DNA restructuring, protein folding patterns, membrane systems,
-    synthetic biology, engineered organisms, biological computing,
-    cross-species hybridization, adaptive evolution, xenobiology,
-    biological complexity, organic technology integration,
-    scientific macro photography, cellular details, 8k resolution`;
+    `;
     
     textInput.value(prompt);
 
