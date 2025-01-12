@@ -3,6 +3,12 @@
 // By [Your Name], 2024
 
 let proxyUrl = "https://replicate-api-proxy.glitch.me/create_n_get/";
+//let proxyUrl = "https://opposite-mud-glasses.glitch.me/create_n_get/";
+//let proxyUrl = "https://proxy-replicate-stablediffusion-api.glitch.me/create_n_get/";
+
+
+
+
 let img;
 let canvasContainer;
 let canvasWidth;
@@ -10,11 +16,6 @@ let canvasHeight;
 let staticLoadingAngle = 0;
 let isGenerating = false;
 let isFirstGeneration = true;
-let isImageFocused = false;
-let focusedImageX = 0;
-let focusedImageY = 0;
-let focusedImageSize = 0;
-let focusedImageRot = 0;
 let images = [];
 let maxImages = 120;
 let currentImageIndex = 0;
@@ -22,13 +23,22 @@ let generationInterval;
 let showWireframes = true;
 let osc;
 let env;
-let rotationX = 0;
-let rotationY = 0;
-let targetRotationX = 0;
-let targetRotationY = 0;
-let isDragging = false;
-let previousMouseX = 0;
-let previousMouseY = 0;
+let focusedImageIndex = -1;  // -1 means no image is focused
+let focusedImagePosition = { x: 0, y: 0, rot: 0, size: 0 };
+let hoveredImageIndex = -1;
+let hoveredImageScale = 1;
+let hoveredImageZ = 0;
+const HOVER_SCALE = 1.5;
+const HOVER_Z = 200;
+let lastHoveredIndex = -1;  // To track when hover changes
+let hoverIndicatorAlpha = 0;  // For smooth fade of hover indicator
+let autonomousStimulation = 0;
+let stimulationPoints = [];
+const MAX_STIMULATION_POINTS = 3;
+const STIMULATION_DECAY = 0.95;
+let autonomousInteractions = [];
+const MAX_AUTONOMOUS_INTERACTIONS = 2;
+const INTERACTION_DURATION = 60;  // frames
 
 let subjects = [
   "hyperdimensional organisms", "quantum biological entities", 
@@ -74,6 +84,11 @@ let environments = [
   "in organic architectures", "in living geometries"
 ];
 
+let elasticPoints = [];
+const NUM_ELASTIC_POINTS = 8;
+const ELASTIC_TENSION = 0.3;
+const ELASTIC_DAMPING = 0.5;
+
 function setup() {
   canvasWidth = windowWidth;
   canvasHeight = windowHeight;
@@ -109,31 +124,18 @@ function setup() {
   textInput.style('background-color', 'rgba(255,255,255,0.9)');
   textInput.style('font-family', 'Helvetica, Arial, sans-serif');
   
-  // Add submit button
-  let submitButton = createButton('Generate');
-  submitButton.parent(uiContainer);
-  submitButton.style('padding', '8px 16px');
-  submitButton.style('border', 'none');
-  submitButton.style('border-radius', '4px');
-  submitButton.style('background-color', '#333');
-  submitButton.style('color', 'white');
-  submitButton.style('font-family', 'Helvetica, Arial, sans-serif');
-  submitButton.style('cursor', 'pointer');
-  submitButton.mousePressed(() => {
-    if (textInput.value().trim() !== '') {
-      generateCustomImage(textInput.value());
-    }
-  });
-
-  // Start automated generation every 2 seconds
-  generationInterval = setInterval(() => {
-    if (images.length < maxImages && !isGenerating) {
-      generateImage();
-    } else if (images.length >= maxImages) {
-      clearInterval(generationInterval);
-      console.log("Reached maximum number of images");
-    }
-  }, 2000);  // Generate every 2 seconds
+  // Modify the start button to be a toggle
+  let startButton = createButton('Start Generation');
+  startButton.parent(uiContainer);
+  startButton.style('padding', '8px 16px');
+  startButton.style('border', 'none');
+  startButton.style('border-radius', '4px');
+  startButton.style('background-color', '#333');
+  startButton.style('color', 'white');
+  startButton.style('font-family', 'Helvetica, Arial, sans-serif');
+  startButton.style('cursor', 'pointer');
+  startButton.style('margin-right', '10px');
+  startButton.mousePressed(() => toggleGeneration(startButton));
 
   // Add hint text for wireframe toggle
   let hintText = createDiv('Press "W" to toggle wireframes');
@@ -159,15 +161,50 @@ function setup() {
 function draw() {
   background(0,0,0);
   
+  // Random chance to create new autonomous interaction
+  if (random(1) < 0.005 && autonomousInteractions.length < MAX_AUTONOMOUS_INTERACTIONS) {  // 0.5% chance each frame
+    // Pick a random image
+    let randomLayer = floor(random(3));
+    let randomIndex = floor(random(120));
+    let frameIndex = floor(abs(randomIndex - 60) + (randomLayer * 40));
+    
+    if (frameIndex < images.length) {
+      autonomousInteractions.push({
+        imageIndex: frameIndex % images.length,
+        duration: INTERACTION_DURATION,
+        scale: 1
+      });
+      
+      // Play interaction sound
+      osc.freq(random(300, 700));
+      env.setADSR(0.001, 0.1, 0.1, 0.1);
+      env.setRange(0.15, 0);
+      env.play(osc);
+    }
+  }
+  
+  // Update and remove finished interactions
+  for (let i = autonomousInteractions.length - 1; i >= 0; i--) {
+    autonomousInteractions[i].duration--;
+    if (autonomousInteractions[i].duration <= 0) {
+      autonomousInteractions.splice(i, 1);
+    }
+  }
+  
+  // Update autonomous stimulation
+  if (random(1) < 0.01) {  // 1% chance each frame to add new stimulation
+    addStimulationPoint();
+  }
+  
+  // Update stimulation points
+  for (let i = stimulationPoints.length - 1; i >= 0; i--) {
+    stimulationPoints[i].intensity *= STIMULATION_DECAY;
+    if (stimulationPoints[i].intensity < 0.05) {
+      stimulationPoints.splice(i, 1);
+    }
+  }
+  
   push();
-  // Smooth rotation interpolation
-  rotationX = lerp(rotationX, targetRotationX, 0.1);
-  rotationY = lerp(rotationY, targetRotationY, 0.1);
-  
-  // Apply the rotation to the entire scene
-  rotateX(rotationX);
-  rotateY(rotationY);
-  
   staticLoadingAngle += 0.002;
   drawMondrianBackground(0.05);
   pop();
@@ -180,162 +217,193 @@ function drawMondrianBackground(speed) {
   for(let layer = 0; layer < layers; layer++) {
     push();
     // Enhanced layer movement with organic wave patterns
-    let layerPulse = sin(staticLoadingAngle * 0.5) * 0.3 + cos(staticLoadingAngle * 0.3) * 0.2;
-    let layerOscillation = sin(staticLoadingAngle * 0.2 + layer) * 0.4;
+    let layerPulse = sin(staticLoadingAngle * 0.5) * 0.3 + 
+                     noise(layer, staticLoadingAngle * 0.1) * 0.5 +
+                     cos(staticLoadingAngle * 0.3) * 0.2;
+    let layerOscillation = sin(staticLoadingAngle * 0.2 + layer) * 0.4 +
+                          noise(layer + 1000, staticLoadingAngle * 0.2) * 0.6;
+    
     rotateZ(-staticLoadingAngle * speed * (layer - 1) * (1 + layerPulse + layerOscillation));
     
     let numSquares = 120;
     for(let i = 0; i < numSquares; i++) {
       push();
       
-      // Enhanced organic movement patterns
       let time = staticLoadingAngle + i * 0.1;
       
-      // Cellular-like pulsing
+      // Enhanced organic pulsing with noise
       let pulseRate = sin(time * 0.2) * 0.5 + 
                      cos(time * 0.3) * 0.3 + 
-                     sin(time * 0.7 + layer) * 0.2;
+                     sin(time * 0.7 + layer) * 0.2 +
+                     noise(i * 0.1, time * 0.3) * 0.8;
       
-      // Bacterial-like trembling
+      // More chaotic trembling
       let trembleFreq = time * 0.5;
-      let trembleX = noise(i * 0.1, trembleFreq) * 30 * (1 + sin(time * 0.2) * 0.5);
-      let trembleY = noise(i * 0.1, trembleFreq + 1000) * 30 * (1 + cos(time * 0.3) * 0.5);
+      let trembleX = noise(i * 0.1, trembleFreq) * 50 * (1 + sin(time * 0.2) * 0.8);
+      let trembleY = noise(i * 0.1, trembleFreq + 1000) * 50 * (1 + cos(time * 0.3) * 0.8);
       
-      // Flagella-like movement
-      let flagellaWave = sin(time * 3 + i * 0.2) * 15 * (1 + noise(i * 0.1, time) * 0.5);
+      // Enhanced fibrillation movement
+      let fibrilX = sin(time * 5 + noise(i, time) * 10) * 20;
+      let fibrilY = cos(time * 4 + noise(i + 1000, time) * 10) * 20;
       
-      // Collective swarm behavior
-      let swarmX = sin(time * 0.2 + i * TWO_PI / numSquares) * 100;
-      let swarmY = cos(time * 0.3 + i * TWO_PI / numSquares) * 100;
+      // Irregular swarm behavior
+      let swarmX = sin(time * 0.2 + i * TWO_PI / numSquares) * 100 * 
+                   (1 + noise(i, time * 0.1) * 0.8);
+      let swarmY = cos(time * 0.3 + i * TWO_PI / numSquares) * 100 * 
+                   (1 + noise(i + 2000, time * 0.1) * 0.8);
       
-      // Base spiral movement with varying radius
-      let spiralTightness = 1 + sin(time * 0.1) * 0.3;
-      let angle = i * TWO_PI / numSquares + staticLoadingAngle * (layer * 0.5 + 1);
-      let radius = (175 + layer * 60 + sin(time * 0.5 + i * 0.2) * 125) * spiralTightness;
+      // Variable spiral movement
+      let spiralTightness = 1 + sin(time * 0.1) * 0.3 + noise(i, time * 0.2) * 0.5;
+      let angle = i * TWO_PI / numSquares + 
+                  staticLoadingAngle * (layer * 0.5 + 1) + 
+                  noise(i * 0.1, time * 0.1) * TWO_PI * 0.2;
       
-      // Combine all movements with organic interpolation
-      let x = cos(angle) * (radius + pulseRate * 50) + 
-             trembleX + swarmX + flagellaWave + 
-             sin(time * 0.4) * 30;
+      // Dynamic radius with stretching
+      let stretchFactor = 1 + sin(time * 0.3 + noise(i, time) * 5) * 0.3;
+      let radius = (175 + layer * 60 + sin(time * 0.5 + i * 0.2) * 125) * 
+                   spiralTightness * stretchFactor;
       
-      let y = sin(angle) * (radius + pulseRate * 50) + 
-             trembleY + swarmY + flagellaWave + 
-             cos(time * 0.3) * 30;
+      // Combine all movements with enhanced organic interpolation
+      let x = cos(angle) * (radius + pulseRate * 80) + 
+              trembleX + swarmX + fibrilX + 
+              sin(time * 0.4) * 50 * noise(i, time * 0.2);
       
-      // Add mitosis-like splitting behavior
-      let splitPhase = sin(time * 0.1 + i * 0.5);
-      if(splitPhase > 0.7) {
-        x += cos(angle) * splitPhase * 20;
-        y += sin(angle) * splitPhase * 20;
-      }
+      let y = sin(angle) * (radius + pulseRate * 80) + 
+              trembleY + swarmY + fibrilY + 
+              cos(time * 0.3) * 50 * noise(i + 1000, time * 0.2);
       
-      // Enhanced breathing effect
-      let breathingEffect = sin(time * 0.5) * 0.2 + 
-                           cos(time * 0.7) * 0.1 + 
-                           noise(i * 0.1, time) * 0.1;
+      translate(x, y);
       
-      let baseSize = width * (0.04 + layer * 0.01) * (1 + breathingEffect);
-      let size = baseSize + sin(time) * baseSize * 0.3;
-      
-      // Add organic rotation with multiple frequencies
+      // Add complex rotation
       let rot = angle * (layer + 1) + 
                 time * (0.5 + sin(i * 0.1) * 0.3) +
                 sin(time * 2) * 0.2 + 
                 cos(time * 3) * 0.1;
-      
-      translate(x, y);
       rotateZ(rot);
       
-      // Add complex scaling behavior
-      let scaleVar = map(sin(time * 0.2 + i * 0.3 + layer), -1, 1, 0.8, 1.2);
-      scaleVar *= (1 + sin(time * 2) * 0.1 + cos(time * 3) * 0.05);
-      scale(scaleVar);
+      // Enhanced breathing effect with more variation
+      let breathingEffect = sin(time * 0.5) * 0.2 + 
+                           cos(time * 0.7) * 0.1 + 
+                           noise(i * 0.1, time) * 0.3 +
+                           sin(time * 0.3 + noise(i, time) * 5) * 0.2;
       
-      // Draw wireframe or image
+      let baseSize = width * (0.06 + layer * 0.015) * (1 + breathingEffect);
+      let size = baseSize + sin(time) * baseSize * 0.3;
+      
+      // Calculate distance from center of sequence
+      let centerIndex = numSquares/2;
+      let distanceFromCenter = abs(i - centerIndex) + (layer * numSquares/3);
+      let frameIndex = floor(distanceFromCenter);
+      
       let alpha = map(sin(staticLoadingAngle + i + layer * 2), -1, 1, 200, 255);
       
-      // Calculate frame index
-      let frameIndex = (i + layer * numSquares);
+      // Calculate influence from stimulation points
+      let totalStimulation = 0;
+      let stimulationX = 0;
+      let stimulationY = 0;
       
-      // Only draw wireframe if showWireframes is true
+      for (let stim of stimulationPoints) {
+        let dx = x - stim.x;
+        let dy = y - stim.y;
+        let dist = sqrt(dx * dx + dy * dy);
+        let influence = (1 - constrain(dist / 500, 0, 1)) * stim.intensity;
+        totalStimulation += influence;
+        
+        // Add directional influence
+        stimulationX += (dx / dist) * influence * 50;
+        stimulationY += (dy / dist) * influence * 50;
+      }
+      
+      // Modify existing movement parameters with stimulation
+      pulseRate = pulseRate * (1 + totalStimulation);
+      trembleX = trembleX * (1 + totalStimulation * 2) + stimulationX;
+      trembleY = trembleY * (1 + totalStimulation * 2) + stimulationY;
+      
+      // Add stimulation-based size pulsing
+      breathingEffect += totalStimulation * 0.3;
+      
+      // Add stimulation-based rotation
+      rot += totalStimulation * sin(time * 3) * PI/4;
+      
+      // If highly stimulated, play sound
+      if (totalStimulation > 0.5 && random(1) < 0.01) {
+        osc.freq(map(totalStimulation, 0, 1, 200, 800));
+        env.setADSR(0.001, 0.05, 0, 0.1);
+        env.setRange(0.1, 0);
+        env.play(osc);
+      }
+      
+      // Draw wireframe
       if (showWireframes) {
-        // Make wireframe more visible while keeping delicate feel
         let wireframeColor = color(
           sin(staticLoadingAngle + i * 0.1) * 127 + 127,
           cos(staticLoadingAngle + i * 0.2) * 127 + 127,
           sin(staticLoadingAngle + i * 0.3) * 127 + 127,
-          alpha * 0.45  // Increased from 0.35
+          alpha * 0.45
         );
+        
         noFill();
-        strokeWeight(0.8);  // Increased from 0.5
+        strokeWeight(0.8);
         stroke(wireframeColor);
         rect(-size/2, -size/2, size, size);
         
-        // Make inner lines more visible
+        // Inner lines
         stroke(wireframeColor);
-        strokeWeight(0.5);  // Increased from 0.3
+        strokeWeight(0.5);
         line(-size/4, -size/2, -size/4, size/2);
         line(size/4, -size/2, size/4, size/2);
         line(-size/2, -size/4, size/2, -size/4);
         line(-size/2, size/4, size/2, size/4);
         
-        // Diagonal lines with increased presence
+        // Diagonal lines
         line(-size/2, -size/2, size/2, size/2);
         line(-size/2, size/2, size/2, -size/2);
       }
       
-      // If this frame has an image, draw it on top
+      // Draw image if available
       if (frameIndex < images.length) {
         push();
-        let mouseRelX = mouseX - width/2;
-        let mouseRelY = mouseY - height/2;
-        let hoverDist = dist(mouseRelX, mouseRelY, x, y);
+        imageMode(CENTER);
+        let imageIndex = frameIndex % images.length;
         
-        // Smoother alpha transition
-        let targetAlpha = hoverDist < size/2 ? 0 : alpha;
-        let currentAlpha = lerp(alpha, targetAlpha, 0.1);
+        // Check if this image has an autonomous interaction
+        let autonomousInteraction = autonomousInteractions.find(interaction => 
+          interaction.imageIndex === imageIndex
+        );
         
-        if (hoverDist < size/2) {
-          isImageFocused = true;
-          focusedImageX = x;
-          focusedImageY = y;
-          focusedImageSize = 512;
-          focusedImageRot = 0;
-          focusedImageIndex = frameIndex;
+        if (imageIndex === hoveredImageIndex || autonomousInteraction) {
+          // Draw hovered/interacted image larger and with full opacity
+          let interactionZ = autonomousInteraction ? 
+            150 + sin(frameCount * 0.1) * 50 : 200;  // Animated z position for autonomous
+          translate(0, 0, interactionZ);
+          
+          tint(255, 255);
+          let interactionScale = autonomousInteraction ? 
+            1.5 + sin(frameCount * 0.2) * 0.2 : 2;  // Animated scale for autonomous
+          let hoverSize = size * interactionScale;
+          image(images[imageIndex], 0, 0, hoverSize, hoverSize);
+          
+          // Enhanced highlight frame
+          noFill();
+          strokeWeight(2);
+          stroke(255, autonomousInteraction ? 100 + sin(frameCount * 0.2) * 50 : 150);
+          rect(-hoverSize/2, -hoverSize/2, hoverSize, hoverSize);
+          
+          // Add inner glow effect
+          for(let i = 0; i < 3; i++) {
+            stroke(255, (autonomousInteraction ? 30 : 50) - i * 15);
+            rect(-hoverSize/2 - i*2, -hoverSize/2 - i*2, hoverSize + i*4, hoverSize + i*4);
+          }
         } else {
-          // More stable image rendering
-          imageMode(CENTER);
-          tint(255, currentAlpha);
-          image(images[frameIndex], 0, 0, size, size);
+          // Draw normal image
+          tint(255, alpha);
+          image(images[imageIndex], 0, 0, size, size);
         }
         pop();
       }
       
-      // Frame outline more visible
-      if (showWireframes) {
-        noFill();
-        strokeWeight(0.5);  // Increased from 0.3
-        stroke(255, alpha * 0.35);  // Increased from 0.25
-        rect(-size/2, -size/2, size, size);
-      }
-      
       pop();
     }
-    pop();
-  }
-  
-  // Draw focused image if needed
-  if (isImageFocused && images.length > 0) {
-    push();
-    translate(0, 0);
-    rotate(focusedImageRot);
-    imageMode(CENTER);
-    tint(255);  // Full opacity for focused image
-    image(images[focusedImageIndex], 0, 0, focusedImageSize, focusedImageSize);
-    noFill();
-    strokeWeight(2);
-    stroke(0, 128);
-    rect(-focusedImageSize/2, -focusedImageSize/2, focusedImageSize, focusedImageSize);
     pop();
   }
   
@@ -355,9 +423,23 @@ async function generateImage() {
     let colorScheme = random(colorSchemes);
     let environment = random(environments);
     
-  
-    let prompt = ` ${subject} ${ element} ${environment} ${style} ${colorScheme}, realistic organism on a black background
-    `;
+    // Enhanced prompt with bioluminescence
+    let bioluminescentElements = [
+      "with bioluminescent patterns",
+      "emanating ethereal light",
+      "glowing with internal energy",
+      "radiating bioluminescent pulses",
+      "with luminous membranes",
+      "pulsing with living light",
+      "with phosphorescent structures",
+      "emitting biological light",
+      "with luminescent organelles",
+      "generating bio-light patterns"
+    ];
+    
+    let luminescence = random(bioluminescentElements);
+    
+    let prompt = `${subject} ${element} ${environment} ${style} ${colorScheme}, ${luminescence}, realistic organism on a black background, volumetric lighting, subsurface scattering`;
     
     textInput.value(prompt);
 
@@ -427,51 +509,81 @@ function windowResized() {
   textInput.style('width', min(450, windowWidth - 100) + 'px');
 }
 
-// Add mouseMoved function to handle focus reset
+// Add mouseMoved function to trigger new generation
 function mouseMoved() {
-  if (!isDragging) {  // Only check for image focus when not dragging
-    let mouseRelX = mouseX - width/2;
-    let mouseRelY = mouseY - height/2;
-    let foundHover = false;
-    
-    if (!foundHover) {
-      isImageFocused = false;
+  let mouseRelX = mouseX - width/2;
+  let mouseRelY = mouseY - height/2;
+  
+  lastHoveredIndex = hoveredImageIndex;
+  hoveredImageIndex = -1;
+  
+  for(let layer = 0; layer < 3; layer++) {
+    for(let i = 0; i < 120; i++) {
+      // Calculate frame index
+      let centerIndex = 120/2;
+      let distanceFromCenter = abs(i - centerIndex) + (layer * 120/3);
+      let frameIndex = floor(distanceFromCenter);
+      
+      if (frameIndex >= images.length) continue;
+      
+      // Calculate position (simplified for hit detection)
+      let angle = i * TWO_PI / 120 + staticLoadingAngle * (layer * 0.5 + 1);
+      let radius = 175 + layer * 60;
+      let x = cos(angle) * radius;
+      let y = sin(angle) * radius;
+      
+      // Calculate size
+      let baseSize = width * (0.06 + layer * 0.015);
+      
+      // Increase detection area
+      let detectionSize = baseSize * 1.2;  // 20% larger detection area
+      
+      let dist = sqrt(pow(mouseRelX - x, 2) + pow(mouseRelY - y, 2));
+      if (dist < detectionSize) {
+        hoveredImageIndex = frameIndex % images.length;
+        if (hoveredImageIndex !== lastHoveredIndex) {
+          playHoverPop();
+        }
+        return;
+      }
     }
   }
 }
 
-// Add mousePressed function to trigger new generation
-function mousePressed() {
-  if (!isImageFocused && mouseY < height - 100) {  // Don't initiate rotation near UI elements
-    isDragging = true;
-    previousMouseX = mouseX;
-    previousMouseY = mouseY;
-  } else {
-    generateImage();
+// Add keyPressed function to handle 'w' key
+function keyPressed() {
+  if (key === 'w' || key === 'W') {
+    showWireframes = !showWireframes;
   }
 }
 
-function mouseReleased() {
-  isDragging = false;
+// Add this new function for the generative pop sound
+function playGenerativePop() {
+  // Random frequency between 200-600 Hz for variety
+  osc.freq(random(200, 600));
+  env.play(osc);
 }
 
-function mouseDragged() {
-  if (isDragging) {
-    // Calculate rotation based on mouse movement with increased sensitivity
-    let deltaX = mouseX - previousMouseX;
-    let deltaY = mouseY - previousMouseY;
-    
-    // Update target rotation with better scaling
-    targetRotationY += deltaX * 0.01;  // Adjusted sensitivity
-    targetRotationX += deltaY * 0.01;  // Adjusted sensitivity
-    
-    // Limit the vertical rotation to avoid flipping
-    targetRotationX = constrain(targetRotationX, -PI/2, PI/2);
-    
-    previousMouseX = mouseX;
-    previousMouseY = mouseY;
-    
-    return false; // Prevent default
+// Replace startGeneration with this new toggle function
+function toggleGeneration(button) {
+  if (!generationInterval) {
+    // Start generation
+    generationInterval = setInterval(() => {
+      if (images.length < maxImages && !isGenerating) {
+        generateImage();
+      } else if (images.length >= maxImages) {
+        clearInterval(generationInterval);
+        generationInterval = null;
+        button.html('Start Generation');
+        console.log("Reached maximum number of images");
+      }
+    }, 2000);  // Generate every 2 seconds
+    button.html('Stop Generation');
+  } else {
+    // Stop generation
+    clearInterval(generationInterval);
+    generationInterval = null;
+    button.html('Start Generation');
   }
 }
 
@@ -524,23 +636,22 @@ async function generateCustomImage(customPrompt) {
   }
 }
 
-// Add keyPressed function to handle 'w' key
-function keyPressed() {
-  if (key === 'w' || key === 'W') {
-    showWireframes = !showWireframes;
-  }
-}
-
-// Add this new function for the generative pop sound
-function playGenerativePop() {
-  // Random frequency between 200-600 Hz for variety
-  osc.freq(random(200, 600));
+// Add new function for hover sound
+function playHoverPop() {
+  osc.freq(random(400, 800));  // Higher frequency range for hover
+  env.setADSR(0.001, 0.05, 0.0, 0.05);  // Shorter, crisper sound
+  env.setRange(0.2, 0);  // Lower volume for hover sound
   env.play(osc);
 }
 
-// Add a function to reset rotation
-function doubleClicked() {
-  // Reset rotation to initial position
-  targetRotationX = 0;
-  targetRotationY = 0;
+// Add this function to create new stimulation points
+function addStimulationPoint() {
+  if (stimulationPoints.length < MAX_STIMULATION_POINTS) {
+    stimulationPoints.push({
+      x: random(-width/2, width/2),
+      y: random(-height/2, height/2),
+      intensity: 1.0,
+      frequency: random(0.5, 2.0)
+    });
+  }
 }
