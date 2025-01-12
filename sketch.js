@@ -2,7 +2,7 @@
 // An exploration of speculative life forms and consciousness
 // By [Your Name], 2024
 
-let proxyUrl = "https://crawling-hazel-vertebra.glitch.me/create_n_get/";
+let proxyUrl = "https://replicate-api-proxy.glitch.me/create_n_get/";
 let img;
 let canvasContainer;
 let canvasWidth;
