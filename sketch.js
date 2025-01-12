@@ -39,6 +39,19 @@ const STIMULATION_DECAY = 0.95;
 let autonomousInteractions = [];
 const MAX_AUTONOMOUS_INTERACTIONS = 1;  // Only one at a time
 const INTERACTION_DURATION = 30;  // Shorter duration for more dynamic feel
+let soundEnabled = false;  // Sound starts disabled
+let soundButtonStyle = {
+  on: {
+    backgroundColor: '#00AA00',  // Green for on
+    text: '🔊 Sound ON',
+    hoverColor: '#008800'
+  },
+  off: {
+    backgroundColor: '#AA0000',  // Red for off
+    text: '🔇 Sound OFF',
+    hoverColor: '#880000'
+  }
+};
 
 let subjects = [
   "hyperdimensional organisms", "quantum biological entities", 
@@ -156,6 +169,49 @@ function setup() {
   env.setRange(0.3, 0);
   osc.start();
   osc.amp(0);
+
+  // Create sound toggle button with enhanced styling
+  let soundButton = createButton(soundButtonStyle.off.text);
+  soundButton.parent(uiContainer);
+  soundButton.style('padding', '8px 16px');
+  soundButton.style('border', 'none');
+  soundButton.style('border-radius', '4px');
+  soundButton.style('background-color', soundButtonStyle.off.backgroundColor);
+  soundButton.style('color', 'white');
+  soundButton.style('font-family', 'Helvetica, Arial, sans-serif');
+  soundButton.style('cursor', 'pointer');
+  soundButton.style('margin-right', '10px');
+  soundButton.style('font-weight', 'bold');
+  soundButton.style('transition', 'all 0.3s ease');
+  
+  // Add hover effects
+  soundButton.mouseOver(() => {
+    soundButton.style('background-color', 
+      soundEnabled ? soundButtonStyle.on.hoverColor : soundButtonStyle.off.hoverColor);
+  });
+  
+  soundButton.mouseOut(() => {
+    soundButton.style('background-color', 
+      soundEnabled ? soundButtonStyle.on.backgroundColor : soundButtonStyle.off.backgroundColor);
+  });
+  
+  soundButton.mousePressed(() => {
+    soundEnabled = !soundEnabled;
+    
+    // Update button appearance
+    soundButton.html(soundEnabled ? soundButtonStyle.on.text : soundButtonStyle.off.text);
+    soundButton.style('background-color', 
+      soundEnabled ? soundButtonStyle.on.backgroundColor : soundButtonStyle.off.backgroundColor);
+    
+    // Play test sound when enabled
+    if (soundEnabled) {
+      // Clear, distinct activation sound
+      osc.freq(880);  // A5 note
+      env.setADSR(0.001, 0.1, 0.1, 0.1);
+      env.setRange(0.3, 0);
+      env.play(osc);
+    }
+  });
 }
 
 function draw() {
@@ -216,14 +272,15 @@ function drawMondrianBackground(speed) {
   let layers = 3;
   for(let layer = 0; layer < layers; layer++) {
     push();
-    // Enhanced layer movement with organic wave patterns
+    // Modify rotation direction for counterclockwise movement
     let layerPulse = sin(staticLoadingAngle * 0.5) * 0.3 + 
                      noise(layer, staticLoadingAngle * 0.1) * 0.5 +
                      cos(staticLoadingAngle * 0.3) * 0.2;
     let layerOscillation = sin(staticLoadingAngle * 0.2 + layer) * 0.4 +
                           noise(layer + 1000, staticLoadingAngle * 0.2) * 0.6;
     
-    rotateZ(-staticLoadingAngle * speed * (layer - 1) * (1 + layerPulse + layerOscillation));
+    // Change the sign to make it rotate counterclockwise
+    rotateZ(staticLoadingAngle * speed * (layer - 1) * (1 + layerPulse + layerOscillation));
     
     let numSquares = 120;
     for(let i = 0; i < numSquares; i++) {
@@ -254,8 +311,8 @@ function drawMondrianBackground(speed) {
       
       // Variable spiral movement
       let spiralTightness = 1 + sin(time * 0.1) * 0.3 + noise(i, time * 0.2) * 0.5;
-      let angle = i * TWO_PI / numSquares + 
-                  staticLoadingAngle * (layer * 0.5 + 1) + 
+      let angle = -i * TWO_PI / numSquares - 
+                  staticLoadingAngle * (layer * 0.5 + 1) - 
                   noise(i * 0.1, time * 0.1) * TWO_PI * 0.2;
       
       // Dynamic radius with stretching
@@ -326,7 +383,7 @@ function drawMondrianBackground(speed) {
       rot += totalStimulation * sin(time * 3) * PI/4;
       
       // If highly stimulated, play sound
-      if (totalStimulation > 0.5 && random(1) < 0.01) {
+      if (totalStimulation > 0.5 && random(1) < 0.01 && soundEnabled) {  // Add soundEnabled check
         osc.freq(map(totalStimulation, 0, 1, 200, 800));
         env.setADSR(0.001, 0.05, 0, 0.1);
         env.setRange(0.1, 0);
@@ -563,6 +620,7 @@ function keyPressed() {
 
 // Add this new function for the generative pop sound
 function playGenerativePop() {
+  if (!soundEnabled) return;
   // Random frequency between 200-600 Hz for variety
   osc.freq(random(200, 600));
   env.play(osc);
@@ -642,9 +700,10 @@ async function generateCustomImage(customPrompt) {
 
 // Add new function for hover sound
 function playHoverPop() {
-  osc.freq(random(400, 800));  // Higher frequency range for hover
-  env.setADSR(0.001, 0.05, 0.0, 0.05);  // Shorter, crisper sound
-  env.setRange(0.2, 0);  // Lower volume for hover sound
+  if (!soundEnabled) return;
+  osc.freq(random(800, 1200));
+  env.setADSR(0.001, 0.05, 0, 0.05);
+  env.setRange(0.3, 0);
   env.play(osc);
 }
 
@@ -662,8 +721,9 @@ function addStimulationPoint() {
 
 // Modify the autonomous interaction sound to be different
 function playAutonomousSound() {
-  osc.freq(random(300, 600));  // Lower frequency for autonomous
-  env.setADSR(0.001, 0.2, 0.2, 0.2);  // Longer, more dramatic sound
+  if (!soundEnabled) return;
+  osc.freq(random(300, 600));
+  env.setADSR(0.001, 0.2, 0.2, 0.2);
   env.setRange(0.3, 0);
   env.play(osc);
 }
