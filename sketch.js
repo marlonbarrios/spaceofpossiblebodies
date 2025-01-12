@@ -102,6 +102,8 @@ const NUM_ELASTIC_POINTS = 8;
 const ELASTIC_TENSION = 0.3;
 const ELASTIC_DAMPING = 0.5;
 
+let audioContextStarted = false;
+
 function setup() {
   canvasWidth = windowWidth;
   canvasHeight = windowHeight;
@@ -162,16 +164,13 @@ function setup() {
   hintText.style('border-radius', '4px');
   hintText.style('z-index', '1000');
 
-  // Initialize audio context only after user interaction
+  // Initialize audio objects but don't start them yet
   osc = new p5.Oscillator('sine');
   env = new p5.Envelope();
   env.setADSR(0.001, 0.1, 0.0, 0.1);
   env.setRange(0.3, 0);
   
-  // Don't start oscillator until sound is enabled
-  osc.amp(0);
-
-  // Modify the sound button to initialize audio on first click
+  // Modify the sound button to properly initialize audio
   let soundButton = createButton(soundButtonStyle.off.text);
   soundButton.parent(uiContainer);
   soundButton.style('padding', '8px 16px');
@@ -197,13 +196,20 @@ function setup() {
   });
   
   soundButton.mousePressed(() => {
+    // Start audio context on first click
+    if (!audioContextStarted) {
+      // Get p5's audio context
+      let audioContext = getAudioContext();
+      audioContext.resume().then(() => {
+        console.log('Audio Context started');
+        audioContextStarted = true;
+        osc.start();
+      });
+    }
+    
     soundEnabled = !soundEnabled;
     
-    // Start audio context and oscillator on first enable
-    if (soundEnabled) {
-      if (!osc.started) {
-        osc.start();
-      }
+    if (soundEnabled && audioContextStarted) {
       // Play test sound
       osc.freq(880);
       env.setADSR(0.001, 0.1, 0.1, 0.1);
@@ -624,7 +630,7 @@ function keyPressed() {
 
 // Add this new function for the generative pop sound
 function playGenerativePop() {
-  if (!soundEnabled) return;
+  if (!soundEnabled || !audioContextStarted) return;
   // Random frequency between 200-600 Hz for variety
   osc.freq(random(200, 600));
   env.play(osc);
@@ -704,7 +710,7 @@ async function generateCustomImage(customPrompt) {
 
 // Add new function for hover sound
 function playHoverPop() {
-  if (!soundEnabled) return;
+  if (!soundEnabled || !audioContextStarted) return;
   osc.freq(random(800, 1200));
   env.setADSR(0.001, 0.05, 0, 0.05);
   env.setRange(0.3, 0);
@@ -725,7 +731,7 @@ function addStimulationPoint() {
 
 // Modify the autonomous interaction sound to be different
 function playAutonomousSound() {
-  if (!soundEnabled) return;
+  if (!soundEnabled || !audioContextStarted) return;
   osc.freq(random(300, 600));
   env.setADSR(0.001, 0.2, 0.2, 0.2);
   env.setRange(0.3, 0);
