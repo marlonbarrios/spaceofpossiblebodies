@@ -162,15 +162,16 @@ function setup() {
   hintText.style('border-radius', '4px');
   hintText.style('z-index', '1000');
 
-  // Remove sound file loading and replace with oscillator setup
+  // Initialize audio context only after user interaction
   osc = new p5.Oscillator('sine');
   env = new p5.Envelope();
   env.setADSR(0.001, 0.1, 0.0, 0.1);
   env.setRange(0.3, 0);
-  osc.start();
+  
+  // Don't start oscillator until sound is enabled
   osc.amp(0);
 
-  // Create sound toggle button with enhanced styling
+  // Modify the sound button to initialize audio on first click
   let soundButton = createButton(soundButtonStyle.off.text);
   soundButton.parent(uiContainer);
   soundButton.style('padding', '8px 16px');
@@ -198,19 +199,22 @@ function setup() {
   soundButton.mousePressed(() => {
     soundEnabled = !soundEnabled;
     
-    // Update button appearance
-    soundButton.html(soundEnabled ? soundButtonStyle.on.text : soundButtonStyle.off.text);
-    soundButton.style('background-color', 
-      soundEnabled ? soundButtonStyle.on.backgroundColor : soundButtonStyle.off.backgroundColor);
-    
-    // Play test sound when enabled
+    // Start audio context and oscillator on first enable
     if (soundEnabled) {
-      // Clear, distinct activation sound
-      osc.freq(880);  // A5 note
+      if (!osc.started) {
+        osc.start();
+      }
+      // Play test sound
+      osc.freq(880);
       env.setADSR(0.001, 0.1, 0.1, 0.1);
       env.setRange(0.3, 0);
       env.play(osc);
     }
+    
+    // Update button appearance
+    soundButton.html(soundEnabled ? soundButtonStyle.on.text : soundButtonStyle.off.text);
+    soundButton.style('background-color', 
+      soundEnabled ? soundButtonStyle.on.backgroundColor : soundButtonStyle.off.backgroundColor);
   });
 }
 
