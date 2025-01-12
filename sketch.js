@@ -37,8 +37,8 @@ let stimulationPoints = [];
 const MAX_STIMULATION_POINTS = 3;
 const STIMULATION_DECAY = 0.95;
 let autonomousInteractions = [];
-const MAX_AUTONOMOUS_INTERACTIONS = 2;
-const INTERACTION_DURATION = 60;  // frames
+const MAX_AUTONOMOUS_INTERACTIONS = 1;  // Only one at a time
+const INTERACTION_DURATION = 30;  // Shorter duration for more dynamic feel
 
 let subjects = [
   "hyperdimensional organisms", "quantum biological entities", 
@@ -162,7 +162,7 @@ function draw() {
   background(0,0,0);
   
   // Random chance to create new autonomous interaction
-  if (random(1) < 0.005 && autonomousInteractions.length < MAX_AUTONOMOUS_INTERACTIONS) {  // 0.5% chance each frame
+  if (random(1) < 0.01 && autonomousInteractions.length < MAX_AUTONOMOUS_INTERACTIONS) {  // 1% chance
     // Pick a random image
     let randomLayer = floor(random(3));
     let randomIndex = floor(random(120));
@@ -175,10 +175,10 @@ function draw() {
         scale: 1
       });
       
-      // Play interaction sound
-      osc.freq(random(300, 700));
-      env.setADSR(0.001, 0.1, 0.1, 0.1);
-      env.setRange(0.15, 0);
+      // Distinct autonomous pop sound
+      osc.freq(random(200, 400));  // Lower frequency for autonomous
+      env.setADSR(0.001, 0.2, 0.1, 0.2);  // Longer, more dramatic sound
+      env.setRange(0.4, 0);  // Slightly louder
       env.play(osc);
     }
   }
@@ -374,19 +374,19 @@ function drawMondrianBackground(speed) {
         if (imageIndex === hoveredImageIndex || autonomousInteraction) {
           // Draw hovered/interacted image larger and with full opacity
           let interactionZ = autonomousInteraction ? 
-            150 + sin(frameCount * 0.1) * 50 : 200;  // Animated z position for autonomous
+            250 + sin(frameCount * 0.2) * 100 : 200;  // More dramatic z movement
           translate(0, 0, interactionZ);
           
           tint(255, 255);
           let interactionScale = autonomousInteraction ? 
-            1.5 + sin(frameCount * 0.2) * 0.2 : 2;  // Animated scale for autonomous
+            2.5 + sin(frameCount * 0.3) * 0.5 : 2;  // Larger scale with more animation
           let hoverSize = size * interactionScale;
           image(images[imageIndex], 0, 0, hoverSize, hoverSize);
           
           // Enhanced highlight frame
           noFill();
-          strokeWeight(2);
-          stroke(255, autonomousInteraction ? 100 + sin(frameCount * 0.2) * 50 : 150);
+          strokeWeight(3);  // Thicker stroke
+          stroke(255, autonomousInteraction ? 150 + sin(frameCount * 0.3) * 100 : 150);
           rect(-hoverSize/2, -hoverSize/2, hoverSize, hoverSize);
           
           // Add inner glow effect
@@ -514,7 +514,7 @@ function mouseMoved() {
   let mouseRelX = mouseX - width/2;
   let mouseRelY = mouseY - height/2;
   
-  lastHoveredIndex = hoveredImageIndex;
+  let previousHovered = hoveredImageIndex;
   hoveredImageIndex = -1;
   
   for(let layer = 0; layer < 3; layer++) {
@@ -541,8 +541,12 @@ function mouseMoved() {
       let dist = sqrt(pow(mouseRelX - x, 2) + pow(mouseRelY - y, 2));
       if (dist < detectionSize) {
         hoveredImageIndex = frameIndex % images.length;
-        if (hoveredImageIndex !== lastHoveredIndex) {
-          playHoverPop();
+        if (hoveredImageIndex !== previousHovered) {
+          // Crisp hover sound
+          osc.freq(random(800, 1200));  // Higher frequency for distinct hover sound
+          env.setADSR(0.001, 0.05, 0, 0.05);  // Very short, crisp sound
+          env.setRange(0.3, 0);  // Good volume
+          env.play(osc);
         }
         return;
       }
@@ -654,4 +658,12 @@ function addStimulationPoint() {
       frequency: random(0.5, 2.0)
     });
   }
+}
+
+// Modify the autonomous interaction sound to be different
+function playAutonomousSound() {
+  osc.freq(random(300, 600));  // Lower frequency for autonomous
+  env.setADSR(0.001, 0.2, 0.2, 0.2);  // Longer, more dramatic sound
+  env.setRange(0.3, 0);
+  env.play(osc);
 }
